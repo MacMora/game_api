@@ -1,2 +1,8 @@
 venv/
 manage.py
+.env
+db.sqlite3
+game_api/migrations/
+game_api/__pycache__/
+config/__pycache__/
+__pycache__
