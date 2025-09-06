@@ -11,6 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,11 +27,55 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-agg%!=f8nc4_-wo&oj+4=)g!6_72d87ev&oth_ad4qe4ki857d'
 
+PROJECT_API_KEY = os.getenv('PROJECT_API_KEY')
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
 ALLOWED_HOSTS = []
 
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+    ],
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+    ],
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "config.core.security.IPBurstThrottle",
+        "config.core.security.IPSustainedThrottle",
+        "rest_framework.throttling.ScopedRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "20/min",
+        "ip_burst": "10/min",
+        "ip_sustained": "200/day",
+        "videogames": "10/min",
+    },
+}
+
+# Seguridad contra clickjacking y ataques XSS
+X_FRAME_OPTIONS = "DENY"
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Limitar tamaño de carga para frenar payloads maliciosos
+DATA_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2 MB
+
+# Logging: sin detallar internals al atacante
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "loggers": {
+        "django.security": {"handlers": ["console"], "level": "WARNING"},
+        "django.request": {"handlers": ["console"], "level": "WARNING"},
+        "rest_framework.throttling": {"handlers": ["console"], "level": "INFO"},
+    },
+}
 
 # Application definition
 
