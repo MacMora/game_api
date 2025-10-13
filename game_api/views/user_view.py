@@ -2,7 +2,7 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, AccessToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
 from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
@@ -100,10 +100,13 @@ class UserViewSet(viewsets.ModelViewSet):
                 
                 # Blacklistear todos los tokens pendientes
                 for token in outstanding_tokens:
-                    BlacklistedToken.objects.get_or_create(token=token)
+                    # Verificar si el token ya está en blacklist
+                    if not BlacklistedToken.objects.filter(token=token).exists():
+                        BlacklistedToken.objects.create(token=token)
                     
         except Exception as e:
             # Si hay algún error, continuamos sin fallar
+            # En producción, podrías loggear este error
             pass
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
@@ -150,7 +153,7 @@ class UserViewSet(viewsets.ModelViewSet):
                 self._invalidate_all_user_tokens(user)
                 refresh = RefreshToken.for_user(user)
                 return Response({
-                    'message': 'Login exitoso',
+                    'message': 'Login exitoso - tokens anteriores invalidados',
                     'user': {
                         'id': user.id,
                         'username': user.username,
@@ -182,17 +185,39 @@ class UserViewSet(viewsets.ModelViewSet):
             'user': serializer.data
         }, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], permission_classes=[IsAuthenticated])
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def logout(self, request):
-        """Logout del usuario - invalida todos los tokens"""
+        """Logout del usuario - invalida todos los tokens usando el access token"""
         try:
-            user = request.user
-            # Invalidar todos los tokens del usuario
-            self._invalidate_all_user_tokens(user)
+            # Obtener el token de autorización del header
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                return Response({
+                    'error': 'Token de autorización requerido'
+                }, status=status.HTTP_401_UNAUTHORIZED)
             
-            return Response({
-                'message': 'Logout exitoso - todos los tokens han sido invalidados'
-            }, status=status.HTTP_200_OK)
+            # Extraer el access token
+            access_token = auth_header.split(' ')[1]
+            
+            try:
+                # Validar el access token
+                token = AccessToken(access_token)
+                user_id = token.payload.get('user_id')
+                
+                # Obtener el usuario
+                user = CustomUser.objects.get(id=user_id)
+                
+                # Invalidar todos los tokens del usuario
+                self._invalidate_all_user_tokens(user)
+                
+                return Response({
+                    'message': 'Logout exitoso - todos los tokens han sido invalidados'
+                }, status=status.HTTP_200_OK)
+                
+            except (TokenError, InvalidToken, CustomUser.DoesNotExist):
+                return Response({
+                    'error': 'Token de acceso inválido'
+                }, status=status.HTTP_401_UNAUTHORIZED)
                 
         except Exception as e:
             return Response({
@@ -221,14 +246,14 @@ class UserViewSet(viewsets.ModelViewSet):
             new_refresh = RefreshToken.for_user(user)
             
             return Response({
-                'message': 'Tokens renovados exitosamente',
+                'message': 'Tokens renovados exitosamente - tokens anteriores invalidados',
                 'tokens': {
                     'access': str(new_refresh.access_token),
                     'refresh': str(new_refresh),
                 }
             }, status=status.HTTP_200_OK)
             
-        except TokenError:
+        except (TokenError, InvalidToken, CustomUser.DoesNotExist):
             return Response({
                 'error': 'Refresh token inválido'
             }, status=status.HTTP_401_UNAUTHORIZED)
