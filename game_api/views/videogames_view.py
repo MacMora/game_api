@@ -1,6 +1,6 @@
 from ..models.videogames_model import VideoGame
 from ..serializers.videogames_serializer import VideoGameSerializer
-from ..permissions import WriteRequiresAPIKey
+from ..permissions import IsAuthenticatedOrReadOnly
 
 from rest_framework import viewsets, status
 from rest_framework.response import Response
@@ -16,7 +16,7 @@ class VideoGameViewSet(viewsets.ModelViewSet):
     renderer_classes = [JSONRenderer]
     parser_classes = [JSONParser]
 
-    permission_classes = [AllowAny & WriteRequiresAPIKey]
+    permission_classes = [IsAuthenticatedOrReadOnly]
 
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "videogames"
